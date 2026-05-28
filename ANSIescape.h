@@ -33,6 +33,15 @@
 //This header file contains functions for all the ANSI escape codes so that I don't have to constantly fucking look at them
 struct termios orig_termios;
 
+typedef struct {
+    const int gwidth, gheight; // width and height of the game field
+    int winwidth, winheight;
+    int px, py, gpx, gpy; // global coordinates (px, py) and game coordinates (x, y)
+    int ghx, ghy, gmx, gmy; // home cords and max cords
+    int runcond;
+    char *openfield; // pointer to the open field array
+} field;
+
 void disable_raw_mode() {
 // Restore terminal settings when the program exits
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios); //apply orig_termios settings
@@ -82,22 +91,47 @@ void chide() {
     printf("\e[?25l");
 }
 
-// void outfield(char array[gameheight][gamewidth], const char *filename) {
-//     FILE *file = fopen(filename, "w");
-//     if (file == NULL) {
-//         printf("Error: Could not open file %s\n", filename);
-//         return;
-//     }
-//     for (int i = 0; i < gameheight; i++) {
-//         for (int j = 0; j < gamewidth; j++) {
-//             fprintf(file, "%c", array[i][j]);
-//             if (j < gamewidth - 1) {
-//                 fprintf(file, "");
-//             }
-//         }
-//         fprintf(file, "\n");
-//     }
+void simple_set(field *face, int x, int y, char value) {
+    if (x >= 0 && x < face->gwidth && y >= 0 && y < face->gheight) {
+        face->openfield[y * face->gwidth + x] = value;
+    }
+}
+
+void simple_set_1d(field *face, int xypos, char value) {
+    face->openfield[xypos] = value;
+}
+
+char simple_get(field *face, int x, int y) {
+    if (x >= 0 && x < face->gwidth && y >= 0 && y < face->gheight) {
+        return face->openfield[y * face->gwidth + x];
+    }
+    return '\0'; // Return null character if out of bounds
+}
+
+char simple_get_1d(field *face, int xypos) {
+    if (xypos >= 0 && xypos < face->gwidth * face->gheight) {
+        return face->openfield[xypos];
+    }
+    // return face->openfield[xypos];
+    return '\0'; // Return null character if out of bounds
+}
+
+void outfield(field *face, const char *filename) {
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        printf("Error: Could not open file %s\n", filename);
+        return;
+    }
+    for (int i = 0; i < face->gheight; i++) {
+        for (int j = 0; j < face->gwidth; j++) {
+            fprintf(file, "%c", simple_get(face, j, i));
+            if (j < face->gwidth - 1) {
+                fprintf(file, "");
+            }
+        }
+        fprintf(file, "\n");
+    }
     
-//     fclose(file);
-// }
+    fclose(file);
+}
 

@@ -6,14 +6,6 @@
 
 
 
-typedef struct {
-    const int gwidth, gheight; // width and height of the game field
-    int winwidth, winheight;
-    int px, py, gpx, gpy; // global coordinates (px, py) and game coordinates (x, y)
-    int ghx, ghy, gmx, gmy; // home cords and max cords
-    int runcond;
-    char *openfield; // pointer to the open field array
-} field;
 
 void renderfield(field *face) {
   clearcolor();
@@ -77,30 +69,6 @@ void renderfield(field *face) {
   }
 }
 
-void simple_set(field *face, int x, int y, char value) {
-    if (x >= 0 && x < face->gwidth && y >= 0 && y < face->gheight) {
-        face->openfield[y * face->gwidth + x] = value;
-    }
-}
-
-void simple_set_1d(field *face, int xypos, char value) {
-    face->openfield[xypos] = value;
-}
-
-char simple_get(field *face, int x, int y) {
-    if (x >= 0 && x < face->gwidth && y >= 0 && y < face->gheight) {
-        return face->openfield[y * face->gwidth + x];
-    }
-    return '\0'; // Return null character if out of bounds
-}
-
-char simple_get_1d(field *face, int xypos) {
-    if (xypos >= 0 && xypos < face->gwidth * face->gheight) {
-        return face->openfield[xypos];
-    }
-    // return face->openfield[xypos];
-    return '\0'; // Return null character if out of bounds
-}
 
 int player(field *face) {
     return face->runcond;
@@ -128,7 +96,7 @@ int gameloop(field *face) {
           face->gpx = face->px - face->ghx;
         break;
       case '0':
-        simpleset(face, face->gpx, face->gpy, '0');
+        simple_set(face, face->gpx, face->gpy, '0');
         if ((face->px < face->gmx) | DEBUG)
           face->px++;
           face->gpx = face->px - face->ghx;
