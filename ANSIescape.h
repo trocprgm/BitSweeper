@@ -5,6 +5,13 @@
 #include <termios.h>
 #include <signal.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
 
 #define BLACK        0x00, 0x00, 0x00
 #define BLUE         0x00, 0x00, 0xAA
@@ -74,4 +81,23 @@ void cshow() {
 void chide() {
     printf("\e[?25l");
 }
+
+// void outfield(char array[gameheight][gamewidth], const char *filename) {
+//     FILE *file = fopen(filename, "w");
+//     if (file == NULL) {
+//         printf("Error: Could not open file %s\n", filename);
+//         return;
+//     }
+//     for (int i = 0; i < gameheight; i++) {
+//         for (int j = 0; j < gamewidth; j++) {
+//             fprintf(file, "%c", array[i][j]);
+//             if (j < gamewidth - 1) {
+//                 fprintf(file, "");
+//             }
+//         }
+//         fprintf(file, "\n");
+//     }
+    
+//     fclose(file);
+// }
 
