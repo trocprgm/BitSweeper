@@ -33,6 +33,7 @@
 
 
 /* Prototypes for ANSI escape helpers (defined in ANSIescape.h) */
+
 void disable_raw_mode(void);
 void enable_raw_mode(void);
 void bgcolor(int red,int green, int blue);

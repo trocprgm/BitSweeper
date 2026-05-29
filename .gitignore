@@ -3,4 +3,10 @@ out
 build.log
 openfield.txt
 field.txt
+bitsweep.o
+BitSweeper.code-workspace
+.clangd
+.vscode/
+outfield.txt
+
 
