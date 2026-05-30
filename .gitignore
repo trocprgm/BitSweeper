@@ -8,5 +8,9 @@ BitSweeper.code-workspace
 .clangd
 .vscode/
 outfield.txt
+build2.log
+compile_commands.json
+log.txt
+
 
 

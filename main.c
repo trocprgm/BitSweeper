@@ -1,7 +1,12 @@
 #include "ANSIescape.h" 
 #define BORDERSYM "&"
-#define DEBUG 0
+#ifdef DEBUG
+  const int DB = 1;
+#else
+  const int DB = 0;
+#endif
 
+#define LOG(fmt, ...)  fprintf(stderr, "[LOG] " fmt "\n", ##__VA_ARGS__)
 
 // #define BLACK        0x00, 0x00, 0x00
 // #define BLUE         0x00, 0x00, 0xAA
@@ -25,7 +30,8 @@ typedef struct {
     int winwidth, winheight;
     int px, py, gpx, gpy, rpy, rpx; // global coordinates (px, py) and game coordinates (x, y)
     int ghx, ghy, gmx, gmy, ghx1, ghx2; // home coords and max coords
-    int runcond;
+    int runcond, opcond;
+    bool insertmode;
     unsigned char left, right, and, or, xor;
     unsigned char lbuf[33], rbuf[33], abuf[33], sbuf[33];
     char *openfield; // pointer to the open field array
@@ -137,6 +143,7 @@ void renderfield(field *face) {
   cpos(5, face->ghy + face->gheight + 2);
   printf("OF char: %c CF char: %c lbuf: %s addr: %p", sg_openfield(face, face->gpx, face->gpy), face->colorfield[face->gpy * face->gwidth + face->gpx], face->lbuf, &face->openfield[face->gpy * face->gwidth + face->gpx]);
   cpos(5, face->ghy + face->gheight + 3);
+  printf("opcond: %d and: %02X or: %02X xor: %02X", face->opcond, face->and, face->or, face->xor);
   // printf("Aint no way: %8s ", face->sbuf);
   for (int row = 0; row < face->gheight; row++) {
     cpos(face->ghx, face->ghy + row);
@@ -182,72 +189,186 @@ void renderfield(field *face) {
   }
   fgcolor(BLACK);
   bgcolor(YELLOW);
+  if (face->insertmode) {
+    cpos(face->ghx, face->ghy - 2);
+    printf("INSERT MODE");
+  // } else {
+  //   bgcolor(BLACK);
+  //   cpos(face->ghx-2, face->ghy + face->gheight + 2);
+  //   printf("NORMAL MODE");
+ }
 }
 
+// Helper function to read escape sequences (arrow keys, etc.)
+char read_escape_sequence(void) {
+    char seq[3];
+    if (getchar() == '[') {  // ESC [
+        char arrow = getchar();
+        switch (arrow) {
+            case 'A': return 'k';  // Up -> k
+            case 'B': return 'j';  // Down -> j
+            case 'C': return 'l';  // Right -> l
+            case 'D': return 'h';  // Left -> h
+            default:  return '\0';
+        }
+    }
+    return '\0';
+}
+
+// Helper function to move cursor with bounds checking
+void move_cursor(field *face, int dx, int dy) {
+    int new_px = face->px + dx;
+    int new_py = face->py + dy;
+    
+    if (new_px >= face->ghx && new_px <= face->gmx)
+        face->px = new_px;
+    if (new_py >= face->ghy && new_py <= face->gmy)
+        face->py = new_py;
+}
 
 void player(field *face) {
-  indexify(face);
-  char ch;
-  ch = getchar();
-  switch (ch) {
-  case '1':
-    ss_openfield(face, face->px - face->ghx, face->py - face->ghy, '1');
-    if ((face->px < face->gmx) | DEBUG)
-      face->px++;
-    break;
-  case '0':
-    ss_openfield(face, face->gpx, face->gpy, '0');
-    if ((face->px < face->gmx) | DEBUG)
-      face->px++;
-    break;
-  case 'a':
-    face->px = face->ghx;
-    break;
-  case 'k':
-    if ((face->py > face->ghy) | DEBUG)
-      face->py--;
-    break;
-  case 'j':
-    if ((face->py < face->gmy) | DEBUG)
-      face->py++;
-    break;
-  case 'h':
-    if ((face->px > face->ghx) | DEBUG)
-      face->px--;
-    break;
-  case 'l':
-    if ((face->px < face->gmx) | DEBUG)
-      face->px++;
-    break;
-  case 'q':
-    face->runcond = 0;
-    break;
-  case 'r':
-    // scrape(face, (face->ghx1 - face->ghx), 0, face->right);
-    break;
-  case 'm':
-    face->rpx = face->px;
-    face->rpy = face->py;
-    break;
-  default:
-    snprintf(face->sbuf, 10, "%c", (unsigned char)ch);
-    break;
-  }
-  indexify(face);
+    indexify(face);
+    int ch;
+    
+    ch = getchar();
+    
+    // Handle escape sequences (arrow keys)
+    if (ch == 27) {
+        ch = read_escape_sequence();
+        if (ch == '\0') {
+            // ESC key pressed (not an arrow key)
+            face->insertmode = !face->insertmode;
+            return;
+        }
+    }
+    
+    if (!face->insertmode) {
+        // Normal mode (navigation and commands)
+        switch (ch) {
+            // Movement
+            case 'h':
+                move_cursor(face, -1, 0);
+                break;
+            case 'j':
+                move_cursor(face, 0, 1);
+                break;
+            case 'k':
+                move_cursor(face, 0, -1);
+                break;
+            case 'l':
+                move_cursor(face, 1, 0);
+                break;
+            
+            // Line navigation
+            case '0':
+                face->px = face->ghx;
+                break;
+            case '$':
+                face->px = face->ghx + (face->gwidth - 1);
+                break;
+            
+            // Commands
+            case 'i':
+                face->insertmode = true;
+                break;
+            case 'q':
+                face->runcond = 0;
+                break;
+            case 'm':
+                face->rpx = face->px;
+                face->rpy = face->py;
+                break;
+            case '`':
+                // Toggle current cell between '0' and '1'
+                ch = sg_openfield(face, face->gpx, face->gpy);
+                ss_openfield(face, face->gpx, face->gpy, (ch == '1') ? '0' : '1');
+                break;
+            case '1':
+                // Set cell to '1' and move right
+                ss_openfield(face, face->gpx, face->gpy, '1');
+                if (face->px < face->gmx)
+                    face->px++;
+                break;
+            case 'r':
+                // Reserved for future use
+                break;
+            default:
+                break;
+        }
+    } else {
+        // Insert mode (editing)
+        switch (ch) {
+            case 'h':
+                move_cursor(face, -1, 0);
+                break;
+            case 'j':
+                move_cursor(face, 0, 1);
+                break;
+            case 'k':
+                move_cursor(face, 0, -1);
+                break;
+            case 'l':
+                move_cursor(face, 1, 0);
+                break;
+            default:
+                // Insert character at current position
+                ss_openfield(face, face->gpx, face->gpy, ch);
+                if (face->px < face->gmx)
+                    face->px++;
+                break;
+        }
+    }
+    
+    indexify(face);
 }
 
 
 int gameloop(field *face) {
     enable_raw_mode();   // switch terminal into raw mode so input/output behave character-by-character
     while (face->runcond == 1) {
-      face->and = face->left & face->right;
-      face->or = face->left | face->right;
-      face->xor = face->left ^ face->right;
+      char centstat= sg_openfield(face, 12, 1);
+      fgcolor(BLACK);
+      bgcolor(YELLOW);
+      cpos(60, face->ghy + face->gheight + 4);
+      switch (centstat) {
+        case '&':
+          face->opcond = 1;
+          face->and = face->left & face->right;
+          printf("AND MODE");
+        break;
+        case '|':
+          face->opcond = 2;
+          face->and = face->left | face->right;
+          printf("OR MODE");
+        break;
+        case '^':
+          face->opcond = 3;
+          face->and = face->left ^ face->right;
+          printf("XOR MODE");
+        break;
+        case '~':
+          face->opcond = 4;
+          face->and = ~(face->left);
+          // cpos(face->ghx1 + 3, face->ghy + 1);
+          printf("NOT MODE");
+        break;
+        case '<':
+          face->opcond = 5;
+          face->and = face->left << face->right;
+          printf("LEFT SHIFT MODE");
+        break;
+        case '>':
+          face->opcond = 6;
+          face->and = face->left >> face->right;
+          printf("RIGHT SHIFT MODE");
+        default:
+          // face->and = 0x00;
+          face->opcond = 0;
+        break;
+      }
+      
       charcopy( face, (face->ghx1 - face->ghx), 0, face->rbuf, face->right);
       charcopy( face, 0, 0, face->lbuf, face->left);
-      // face->and = face->left & face->right;
-      // face.or = face.left | face.right;
-      // face.xor = face.left ^ face.right;
       chome();
       bgcolor(LIGHTCYAN);
       renderfield(face);
@@ -258,7 +379,9 @@ int gameloop(field *face) {
       player(face);
       scrape(face, (face->ghx1 - face->ghx), 0, &face->right);
       scrape(face, 0, 0, &face->left);
+      if (face->opcond != 0) {
       charcopy(face, (face->ghx2 - face->ghx), 0, face->abuf, face->and);
+      }
     }
     clearcolor();       // reset terminal colors back to defaults
     disable_raw_mode();  // restore terminal settings before exiting
@@ -289,6 +412,7 @@ field setfield(int gwidth, int gheight) {
         .winwidth = w.ws_col,
         .winheight = w.ws_row,
         .runcond = 1,
+        .opcond = 0,
         .left = '\x04',
         // .lbuf[33] = 
         .right = '\xAF'
@@ -300,10 +424,10 @@ field setfield(int gwidth, int gheight) {
     };
     fgcolor(BLACK);
     bgcolor(YELLOW);
-    
+    #ifdef DEBUG
     printf("gwidth: %d gheight: %d ghx: %d ghy: %d gmx: %d gmy: %d px: %d py: %d gpx: %d gpy: %d\n", face.gwidth, face.gheight, face.ghx, face.ghy, face.gmx, face.gmy, face.px, face.py, face.gpx, face.gpy);
-
     printf("\nBuffer content: lbuf: %s rbuf: %s abuf: %s\n", face.lbuf, face.rbuf, face.abuf);
+    #endif
     face.openfield = malloc(sizeof(char) * gwidth * gheight); 
     face.colorfield = malloc(sizeof(char) * gwidth * gheight); 
     // face.fgcolorfield = malloc(sizeof(int) * gwidth * gheight); 
@@ -356,61 +480,54 @@ void scrape(field *face,  int x, int y, unsigned char *value) {
   unsigned char fromX = strtoul(bufX, NULL, 16);
   unsigned char fromB = strtoul(bufB, NULL, 2);
   unsigned char fromD = strtoul(bufD, NULL, 10);
-  if (DEBUG) {
+  #ifdef DEBUG
     printf("scabbed hex: %X\n", fromX);
     printf("scabbed binary: %d\n", fromB);
     printf("scabbed decimal: %d\n", fromD);
-  }
-
+  #endif
   switch (face->gpy) {
-    case 1:
+    case 0:
       *value = fromB;
     break;
-    case 2:
+    case 1:
       *value = fromX;
     break;
-    case 3:
+    case 2:
       *value = fromD;
     break;
     default:
-      *value = fromB;
+      *value = fromX;
     break;
   }
 
 }
 
 void charcopy(field *face,  int x, int y, char *buf, unsigned char value) {
-  char bruh[9];
-  for (int i = 0; i < 8; i++) {
-    bruh[i] = '0' + ((value >> (7 - i)) & 1);
-  }
-  snprintf(buf, 33, "b#%s X#%02X d#%03d", bruh, (unsigned char)value, (unsigned char)value);
-  if (DEBUG) { printf("blused buffer: %s\n", buf); }
-  for (int i = 0; i < 10; i++) {
-    ss_openfield(face, x + i, y, buf[i]);
-  }
-  for (int i = 0; i < 4; i++) {
-    ss_openfield(face, x + i, y + 1, buf[11 + i]);
-  }
-  for (int i = 0; i < 5; i++) {
-    ss_openfield(face, x + i, y + 2, buf[16 + i]);
-  }
+    char bruh[9];
+    for (int i = 0; i < 8; i++) {
+      bruh[i] = '0' + ((value >> (7 - i)) & 1);
+    }
+    snprintf(buf, 33, "b#%s X#%02X d#%03d", bruh, (unsigned char)value, (unsigned char)value);
+    #ifdef DEBUG
+    printf("blused buffer: %s\n", buf);
+    #endif
+    for (int i = 0; i < 10; i++) {
+      ss_openfield(face, x + i, y, buf[i]);
+    }
+    for (int i = 0; i < 4; i++) {
+      ss_openfield(face, x + i, y + 1, buf[11 + i]);
+    }
+    for (int i = 0; i < 5; i++) {
+      ss_openfield(face, x + i, y + 2, buf[16 + i]);
+    }
 }
 
-// void colorize(char colors) {
-// }
+
 
 int main() {
+    LOG("Starting BitSweeper..%d", 12 );
     field face = setfield(37, 3);
     datacols(&face, 3);
-    // charcopy(&face, (face.ghx2 - face.ghx), 0, face.abuf, face.and);
-    face.lbuf[32] = '\0';
-    face.rbuf[32] = '\0';
-    face.abuf[32] = '\0';
-
-    //
-    // scrape(face, (face->ghx1 - face->ghx), 0, face->rbuf, face->right);
-    // simpleset(&face, 11, 0, '_');
     outfield(&face, "outfield.txt");
     gameloop(&face);
     return 0;           // exit the program with success status
